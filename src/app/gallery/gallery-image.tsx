@@ -13,9 +13,9 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
   // If we have the secure_url from Cloudinary, use it directly
   // Otherwise, try multiple URL formats
   const urlFormats = secureUrl ? [secureUrl] : [
-    `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto,w_600/${publicId}`,
-    `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto,w_600/${publicId}.jpg`,
-    `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto,w_600/${publicId}.png`,
+    `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto,w_1000/${publicId}`,
+    `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto,w_1000/${publicId}.jpg`,
+    `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto,w_1000/${publicId}.png`,
     `https://res.cloudinary.com/${cloudName}/image/upload/${publicId}`,
     `https://res.cloudinary.com/${cloudName}/image/upload/${publicId}.jpg`,
     `https://res.cloudinary.com/${cloudName}/image/upload/${publicId}.png`
@@ -25,6 +25,8 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
   const [isLoading, setIsLoading] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
   const [imageLoaded, setImageLoaded] = React.useState(false);
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [imageDimensions, setImageDimensions] = React.useState({ width: 0, height: 0 });
   const imageUrl = urlFormats[currentUrlIndex];
   const imageRef = React.useRef<HTMLImageElement>(null);
 
@@ -45,7 +47,9 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
     }
   }, [imageUrl, imageLoaded]);
 
-  const handleImageLoad = () => {
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    const img = e.target as HTMLImageElement;
+    setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
     setImageLoaded(true);
     setIsLoading(false);
     setHasError(false);
@@ -62,52 +66,140 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
     }
   };
 
+  const handleClick = () => {
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+  };
+
+  // Handle keyboard navigation
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isModalOpen && e.key === 'Escape') {
+        handleCloseModal();
+      }
+    };
+
+    if (isModalOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isModalOpen]);
+
   const fileName = displayName || publicId.split('/').pop() || 'Artwork';
 
+  // Calculate aspect ratio for better sizing
+  const aspectRatio = imageDimensions.height > 0 ? imageDimensions.width / imageDimensions.height : 1;
+  const isPortrait = aspectRatio < 1;
+  const isLandscape = aspectRatio > 1.5;
+
   return (
-    <div className="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-700 transform hover:-translate-y-2 bg-white">
-      <img
-        ref={imageRef}
-        src={imageUrl}
-        alt={fileName}
-        className="w-full h-80 object-cover transition-transform duration-700 group-hover:scale-110"
-        onLoad={handleImageLoad}
-        onError={handleImageError}
-      />
-      
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500">
-        <div className="absolute bottom-0 left-0 right-0 p-6">
-          <h3 className="font-playfair text-white font-semibold text-xl mb-2">{fileName}</h3>
-          <p className="font-inter text-white/90 text-sm">View artwork</p>
+    <>
+      <div 
+        className="group relative cursor-pointer"
+        onClick={handleClick}
+      >
+        {/* Minimal frame */}
+        <div className="bg-white p-1 artistic-shadow hover:artistic-shadow-hover transition-all duration-500 transform hover:-translate-y-1 gallery-image-enter">
+          {/* Minimal inner matting */}
+          <div className="bg-gradient-to-br from-slate-50 to-gray-100 p-1">
+            <div className="relative overflow-hidden">
+              <img
+                ref={imageRef}
+                src={imageUrl}
+                alt={fileName}
+                className={`w-full transition-all duration-700 group-hover:scale-105 ${
+                  isPortrait ? 'h-auto max-h-[500px]' : 
+                  isLandscape ? 'h-auto max-h-[400px]' : 
+                  'h-auto max-h-[450px]'
+                } object-contain`}
+                onLoad={handleImageLoad}
+                onError={handleImageError}
+              />
+              
+              {/* Elegant overlay on hover */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500">
+                <div className="absolute bottom-0 left-0 right-0 p-2">
+                  <h3 className="font-playfair text-white font-semibold text-base mb-1">{fileName}</h3>
+                  <p className="font-inter text-white/90 text-xs">Click to view full size</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+        
+        {/* Loading state */}
+        {isLoading && !imageLoaded && (
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-50 to-indigo-50 animate-pulse flex items-center justify-center">
+            <div className="text-purple-400">
+              <svg className="w-12 h-12 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+          </div>
+        )}
+        
+        {/* Error state */}
+        {hasError && (
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+            <div className="text-center text-gray-500 p-6">
+              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="font-inter text-sm">Unable to load artwork</p>
+            </div>
+          </div>
+        )}
       </div>
-      
-      {/* Loading state - only show while loading and after delay */}
-      {isLoading && !imageLoaded && (
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-50 to-indigo-50 animate-pulse flex items-center justify-center">
-          <div className="text-purple-400">
-            <svg className="w-12 h-12 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+
+      {/* Lightbox Modal */}
+      {isModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 lightbox-backdrop"
+          onClick={handleCloseModal}
+        >
+          <div className="relative max-w-7xl max-h-full lightbox-content">
+            {/* Close button */}
+            <button
+              onClick={handleCloseModal}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors duration-200 z-10"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            {/* Image container */}
+            <div 
+              className="bg-white p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={imageUrl}
+                alt={fileName}
+                className="max-w-full max-h-[80vh] object-contain"
+              />
+              
+              {/* Image info */}
+              <div className="mt-4 text-center">
+                <h3 className="font-playfair text-xl font-semibold text-gray-900 mb-2">{fileName}</h3>
+                <p className="font-inter text-gray-600 text-sm">
+                  {imageDimensions.width > 0 && imageDimensions.height > 0 && 
+                    `${imageDimensions.width} × ${imageDimensions.height} pixels`
+                  }
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
-      
-      {/* Error state */}
-      {hasError && (
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-          <div className="text-center text-gray-500 p-6">
-            <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="font-inter text-sm">Unable to load artwork</p>
-          </div>
-        </div>
-      )}
-      
-      {/* Subtle border on hover */}
-      <div className="absolute inset-0 border-2 border-transparent group-hover:border-purple-200 rounded-2xl transition-colors duration-500"></div>
-    </div>
+    </>
   );
 } 

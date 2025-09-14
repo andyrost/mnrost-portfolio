@@ -38,15 +38,16 @@ export default function GalleryClient({ resources, cloudName }: GalleryClientPro
             </p>
           </div>
           
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-3 space-y-3">
             {resources.map((i: any) => (
-              <GalleryImage 
-                key={i.public_id}
-                publicId={i.public_id}
-                cloudName={cloudName}
-                secureUrl={i.secure_url}
-                displayName={i.display_name}
-              />
+              <div key={i.public_id} className="break-inside-avoid mb-3">
+                <GalleryImage 
+                  publicId={i.public_id}
+                  cloudName={cloudName}
+                  secureUrl={i.secure_url}
+                  displayName={i.display_name}
+                />
+              </div>
             ))}
           </div>
           
