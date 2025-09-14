@@ -165,17 +165,17 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
           className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 lightbox-backdrop"
           onClick={handleCloseModal}
         >
+          {/* Close button - positioned outside animated content */}
+          <button
+            onClick={handleCloseModal}
+            className="fixed top-4 right-4 text-white hover:text-gray-300 transition-all duration-200 z-10 bg-black/20 hover:bg-black/40 rounded-full p-2 backdrop-blur-sm"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          
           <div className="relative max-w-7xl max-h-full lightbox-content">
-            {/* Close button */}
-            <button
-              onClick={handleCloseModal}
-              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors duration-200 z-10"
-            >
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            
             {/* Image container */}
             <div 
               className="bg-white p-6 shadow-2xl"
