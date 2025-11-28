@@ -1,82 +1,147 @@
 // /app/api/gallery/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { v2 as cloudinary } from 'cloudinary';
+import { list, put } from '@vercel/blob';
 
-// Check if environment variables are set
-if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-  console.error('Missing Cloudinary environment variables');
+const MANIFEST_FILENAME = 'manifest.json';
+
+interface ManifestItem {
+  key: string;      // blob pathname (unique identifier)
+  url: string;      // public blob URL
+  title: string;
+  order: number;
 }
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+interface Manifest {
+  items: ManifestItem[];
+}
 
+// Helper to get the manifest
+async function getManifest(): Promise<Manifest> {
+  try {
+    const { blobs } = await list({ prefix: MANIFEST_FILENAME });
+    const manifestBlob = blobs.find(b => b.pathname === MANIFEST_FILENAME);
+    
+    if (!manifestBlob) {
+      return { items: [] };
+    }
+    
+    const response = await fetch(manifestBlob.url, { cache: 'no-store' });
+    if (!response.ok) {
+      return { items: [] };
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching manifest:', error);
+    return { items: [] };
+  }
+}
+
+// GET: List all images with manifest data
 export async function GET() {
   try {
-    const [{ resources }, manifestResp] = await Promise.all([
-      cloudinary.search
-        .expression('folder:portfolio/*')
-        .sort_by('public_id', 'desc')
-        .max_results(200)
-        .execute(),
-      fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/admin/manifest`, { cache: 'no-store' })
+    const [{ blobs }, manifest] = await Promise.all([
+      list({ prefix: 'portfolio/' }),
+      getManifest()
     ]);
 
-    const manifestData = manifestResp.ok ? await manifestResp.json() : { items: [] };
-    const manifestMap: Record<string, { title: string; order: number }> = {};
-    for (const item of manifestData.items || []) {
-      manifestMap[item.key] = { title: item.title || '', order: Number.isFinite(item.order) ? item.order : 0 };
-    }
+    // Create a map for quick lookup
+    const manifestMap = new Map(
+      manifest.items.map(item => [item.key, item])
+    );
 
-    const enriched = (resources || []).map((r: any) => {
-      const key = r.public_id;
-      const context = r?.context || {};
-      const custom = context?.custom || {};
-      const fallbackTitle = r.display_name || custom.caption || context.caption || custom.title || '';
-      const m = manifestMap[key];
-      return {
-        ...r,
-        display_name: m?.title ?? fallbackTitle,
-        order: m?.order ?? 0,
-      };
-    });
+    // Filter to only image files and enrich with manifest data
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const images = blobs
+      .filter(blob => {
+        const ext = blob.pathname.toLowerCase().slice(blob.pathname.lastIndexOf('.'));
+        return imageExtensions.includes(ext);
+      })
+      .map(blob => {
+        const manifestItem = manifestMap.get(blob.pathname);
+        return {
+          pathname: blob.pathname,
+          url: blob.url,
+          uploadedAt: blob.uploadedAt,
+          size: blob.size,
+          title: manifestItem?.title || blob.pathname.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Untitled',
+          order: manifestItem?.order ?? 999999,
+        };
+      })
+      .sort((a, b) => a.order - b.order);
 
-    enriched.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
-    return NextResponse.json({ resources: enriched });
+    return NextResponse.json({ images });
   } catch (error) {
-    console.error('Cloudinary API error:', error);
+    console.error('Blob API error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch images from Cloudinary' },
+      { error: 'Failed to fetch images' },
       { status: 500 }
     );
   }
 }
 
-// Signed upload signature endpoint
+// POST: Upload a new image (authenticated)
 export async function POST(req: NextRequest) {
   try {
     const isAuthed = req.cookies.get('admin_session')?.value === '1';
     if (!isAuthed) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const body = await req.json();
-    // Accept arbitrary params and sign them server-side for security
-    const { paramsToSign } = body || {};
-    if (!paramsToSign || typeof paramsToSign !== 'object') {
-      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+
+    const formData = await req.formData();
+    const file = formData.get('file') as File | null;
+    const title = (formData.get('title') as string) || '';
+
+    if (!file) {
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // IMPORTANT: Sign exactly the params provided by the widget
-    console.log('Signing upload params (exact):', paramsToSign);
-    const signature = cloudinary.utils.api_sign_request(
-      paramsToSign,
-      process.env.CLOUDINARY_API_SECRET as string
-    );
-    return NextResponse.json({ signature });
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json({ error: 'Invalid file type' }, { status: 400 });
+    }
+
+    // Generate a unique filename
+    const ext = file.name.split('.').pop() || 'jpg';
+    const slug = title
+      ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50)
+      : `image-${Date.now()}`;
+    const pathname = `portfolio/${slug}-${Date.now()}.${ext}`;
+
+    // Upload to Vercel Blob
+    const blob = await put(pathname, file, {
+      access: 'public',
+      addRandomSuffix: false,
+    });
+
+    // Update manifest
+    const manifest = await getManifest();
+    const maxOrder = manifest.items.reduce((max, item) => Math.max(max, item.order), -1);
+    
+    manifest.items.push({
+      key: blob.pathname,
+      url: blob.url,
+      title: title || 'Untitled',
+      order: maxOrder + 1,
+    });
+
+    // Save updated manifest
+    await put(MANIFEST_FILENAME, JSON.stringify(manifest, null, 2), {
+      access: 'public',
+      addRandomSuffix: false,
+    });
+
+    return NextResponse.json({
+      success: true,
+      image: {
+        pathname: blob.pathname,
+        url: blob.url,
+        title: title || 'Untitled',
+      },
+    });
   } catch (error) {
-    console.error('Failed to create signature', error);
-    return NextResponse.json({ error: 'Failed to create signature' }, { status: 500 });
+    console.error('Upload error:', error);
+    return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 });
   }
 }

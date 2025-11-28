@@ -1,309 +1,142 @@
 'use client';
-import { useEffect, useState } from 'react';
 
-// Extend Window interface to include cloudinary
-declare global {
-  interface Window {
-    cloudinary: any;
-  }
-}
+import { useEffect, useState, useRef } from 'react';
 
 export default function UploadWidget() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const [password, setPassword] = useState('');
   const [title, setTitle] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset authentication state on component mount
+  // Check auth status on mount
   useEffect(() => {
-    setIsAuthenticated(false);
-    setShowPasswordModal(false);
-    setError(null);
-    setPassword('');
-    // Clear any potential browser storage
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('isAuthenticated');
-      sessionStorage.removeItem('isAuthenticated');
-    }
-  }, []);
-
-  // Server-validated password. No client-stored secret.
-  const correctPassword = undefined;
-
-  const handlePasswordSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
     (async () => {
       try {
-        const res = await fetch('/api/admin/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password })
-        });
-        if (!res.ok) {
-          setError('Incorrect password');
-          return;
+        const res = await fetch('/api/admin/login');
+        const data = await res.json();
+        if (data?.authenticated) {
+          setIsAuthenticated(true);
         }
-        setIsAuthenticated(true);
-        setShowPasswordModal(false);
-        setError(null);
-        setPassword('');
-        setTimeout(() => setShowDetailsModal(true), 50);
-      } catch (e) {
-        setError('Login failed');
+      } catch {
+        // Not authenticated
       }
     })();
-  };
+  }, []);
 
-  const slugify = (value: string): string => {
-    return value
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .slice(0, 120);
-  };
-
-  const handleDetailsSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Allow empty titles, but prefer at least something
-    setShowDetailsModal(false);
-    setTimeout(() => {
-      openUploadWidgetAuthenticated();
-    }, 50);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+
+      if (!res.ok) {
+        setError('Incorrect password');
+        return;
+      }
+
+      setIsAuthenticated(true);
+      setShowPasswordModal(false);
+      setPassword('');
+      setTimeout(() => setShowUploadModal(true), 50);
+    } catch {
+      setError('Login failed');
+    }
   };
 
-  // Internal function that opens the widget without auth checks
-  const openUploadWidgetAuthenticated = () => {
-    console.log('Opening upload widget (authenticated path)');
-    // Check if environment variables are available
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = process.env.NEXT_PUBLIC_UPLOAD_PRESET;
-    const allowCustomPublicId = process.env.NEXT_PUBLIC_ALLOW_CUSTOM_PUBLIC_ID === 'true';
-    
-    console.log('Environment variables:', { cloudName: !!cloudName, uploadPreset: !!uploadPreset });
-    
-    if (!cloudName || !uploadPreset) {
-      console.error('Upload configuration not available');
-      setError('Upload configuration not available');
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Please select a valid image file (JPG, PNG, GIF, or WebP)');
       return;
     }
 
-    setStatus('Opening upload widget...');
-    let successfulUploads = 0;
-    let encounteredError = false;
-
-    const caption = (title || '').trim();
-    const widgetOptions: any = {
-      cloudName: cloudName,
-      uploadPreset: uploadPreset,
-      folder: 'portfolio',
-      sources: ['local'],
-      multiple: false,
-      maxFiles: 1,
-      resourceType: 'image',
-      clientAllowedFormats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-      maxImageFileSize: 20000000, // 20MB
-      tags: ['portfolio'],
-      // Send context as a string to maximize compatibility
-      context: caption ? `caption=${caption}|alt=${caption}` : undefined,
-      // Let the widget pass publicId which it maps to public_id internally when signed
-      publicId: allowCustomPublicId && caption ? slugify(caption) : undefined,
-      cropping: true,
-      croppingCoordinatesMode: 'custom',
-      croppingShowDimensions: true,
-      croppingValidateDimensions: true,
-      showAdvancedOptions: true,
-      showUploadMoreButton: true,
-      showPoweredBy: false,
-      showCompletedButton: true,
-      showSkipButton: false,
-      autoMinimize: false,
-      styles: {
-        palette: {
-          window: "#FFFFFF",
-          sourceBg: "#F4F4F5",
-          windowBorder: "#90A0B3",
-          tabIcon: "#0078FF",
-          inactiveTabIcon: "#69778A",
-          menuIcons: "#0078FF",
-          link: "#0078FF",
-          action: "#0078FF",
-          inProgress: "#0078FF",
-          complete: "#20B832",
-          error: "#EA2727",
-          textDark: "#000000",
-          textLight: "#FFFFFF"
-        }
-      }
-    };
-
-    // Optionally enable signed uploads so we can reliably set public_id and context
-    const useSignedUploads = process.env.NEXT_PUBLIC_USE_SIGNED_UPLOADS === 'true';
-    const publicApiKey = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY;
-    if (useSignedUploads) {
-      if (!publicApiKey) {
-        console.error('Missing NEXT_PUBLIC_CLOUDINARY_API_KEY for signed uploads');
-        setError('Upload configuration not available');
-        setStatus('');
-        return;
-      }
-      widgetOptions.apiKey = publicApiKey;
-      // Cloudinary Upload Widget v2: uploadSignature accepts a callback and paramsToSign
-      widgetOptions.uploadSignature = (callback: any, paramsToSign: any) => {
-        console.log('Widget requested signature for params:', paramsToSign);
-        // Server will sign arbitrary params (folder, public_id, context, timestamp, etc.)
-        fetch('/api/gallery', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paramsToSign })
-        })
-          .then(async (res) => {
-            if (!res.ok) throw new Error('Signature request failed');
-            const data = await res.json();
-            if (!data.signature) throw new Error('Invalid signature response');
-            // Pass back both signature and the timestamp provided by the widget
-            callback(data.signature, paramsToSign.timestamp);
-          })
-          .catch((err) => {
-            console.error('Signature error:', err);
-            setError('Failed to generate upload signature');
-            setStatus('');
-          });
-      };
+    // Validate file size (20MB max)
+    if (file.size > 20 * 1024 * 1024) {
+      setError('File size must be less than 20MB');
+      return;
     }
 
-    const widgetCallback = (err: any, res: any) => {
-      if (err) {
-        encounteredError = true;
-        console.error('Upload error:', err);
-        setError(`Upload error: ${err.message || 'Unknown error'}`);
-        setStatus('');
-        return;
-      }
+    setSelectedFile(file);
+    setError(null);
 
-      if (!res || !res.event) {
-        return;
-      }
-
-      if (res.event === 'success') {
-        successfulUploads += 1;
-      }
-
-      if (res.event === 'queues-end') {
-        if (successfulUploads > 0) {
-          console.log('Uploads completed with successes:', successfulUploads);
-          setStatus('Updating manifest...');
-          // Fetch current manifest, append if missing, then save
-          (async () => {
-            try {
-              const manRes = await fetch('/api/admin/manifest', { cache: 'no-store' });
-              const manifest = manRes.ok ? await manRes.json() : { items: [] };
-              const publicId = res?.info?.public_id || res?.data?.public_id;
-              if (publicId) {
-                const items = Array.isArray(manifest.items) ? manifest.items : [];
-                const exists = items.some((i: any) => i.key === publicId);
-                const maxOrder = items.reduce((m: number, i: any) => Math.max(m, Number(i.order) || 0), 0);
-                const newItem = { key: publicId, title: caption, order: exists ? undefined : maxOrder + 1 } as any;
-                const nextItems = exists
-                  ? items.map((i: any) => (i.key === publicId ? { ...i, title: caption } : i))
-                  : [...items, newItem];
-                const saveRes = await fetch('/api/admin/manifest', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ items: nextItems })
-                });
-                if (!saveRes.ok) throw new Error('Failed to save manifest');
-              }
-              setStatus('Uploads complete');
-              setTimeout(() => window.location.reload(), 300);
-            } catch (e) {
-              console.error(e);
-              setError('Upload succeeded but updating manifest failed');
-              setStatus('');
-            }
-          })();
-        } else {
-          console.warn('Upload finished with no successful files');
-          setError('Upload failed or was cancelled');
-          setStatus('');
-        }
-      }
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setPreview(e.target?.result as string);
     };
-    
-    // Try multiple CDN URLs in case one fails
-    const scriptUrls = [
-      'https://upload-widget.cloudinary.com/global/all.js',
-      'https://upload-widget.cloudinary.com/2.27.9/global/all.js',
-      'https://res.cloudinary.com/cloudinary-js/upload-widget/global/all.js'
-    ];
-    
-    let currentUrlIndex = 0;
-    
-    const loadScript = () => {
-      if (currentUrlIndex >= scriptUrls.length) {
-        setError('Failed to load upload widget');
-        setStatus('');
-        return;
-      }
-      
-      const scriptUrl = scriptUrls[currentUrlIndex];
-      
-      // If widget already loaded, skip loading script
-      if (typeof window !== 'undefined' && typeof window.cloudinary !== 'undefined') {
-        try {
-          window.cloudinary.openUploadWidget(widgetOptions, widgetCallback);
-        } catch (err) {
-          console.error('Widget error:', err);
-          setError(`Widget error: ${err instanceof Error ? err.message : 'Unknown error'}`);
-          setStatus('');
-        }
-        return;
-      }
-
-      const s = document.createElement('script');
-      s.src = scriptUrl;
-      s.async = true;
-      s.crossOrigin = 'anonymous';
-      
-      s.onload = () => {
-        setTimeout(() => {
-          try {
-            if (typeof window.cloudinary === 'undefined') {
-              throw new Error('Cloudinary widget not available');
-            }
-            
-            window.cloudinary.openUploadWidget(widgetOptions, widgetCallback);
-          } catch (err) {
-            console.error('Widget error:', err);
-            setError(`Widget error: ${err instanceof Error ? err.message : 'Unknown error'}`);
-            setStatus('');
-          }
-        }, 1000);
-      };
-      
-      s.onerror = () => {
-        currentUrlIndex++;
-        loadScript(); // Try next URL
-      };
-      
-      document.body.appendChild(s);
-    };
-    
-    loadScript();
+    reader.readAsDataURL(file);
   };
 
-  // Button handler that enforces authentication before opening the widget
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedFile) {
+      setError('Please select an image to upload');
+      return;
+    }
+
+    setUploading(true);
+    setStatus('Uploading...');
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('title', title);
+
+      const res = await fetch('/api/gallery', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      setStatus('Upload complete!');
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+      setStatus('');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleAddWorkClick = () => {
-    console.log('handleAddWorkClick:', { isAuthenticated });
     if (!isAuthenticated) {
       setShowPasswordModal(true);
       return;
     }
-    openUploadWidgetAuthenticated();
+    setShowUploadModal(true);
+  };
+
+  const resetUploadModal = () => {
+    setShowUploadModal(false);
+    setSelectedFile(null);
+    setPreview(null);
+    setTitle('');
+    setError(null);
+    setStatus('');
   };
 
   return (
@@ -317,7 +150,7 @@ export default function UploadWidget() {
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
         </svg>
-        <span className="hidden sm:inline">Add Work</span>
+        <span className="font-inter font-medium">Add Work</span>
       </button>
 
       {/* Password Modal */}
@@ -325,12 +158,11 @@ export default function UploadWidget() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
             <h3 className="font-playfair text-2xl font-semibold text-gray-900 mb-4 text-center">
-              Authentication Required
+              Admin Access
             </h3>
             <p className="font-inter text-gray-600 mb-6 text-center">
-              Please enter the password to add new work to the portfolio.
+              Enter the password to upload new artwork.
             </p>
-            
             <form onSubmit={handlePasswordSubmit} className="space-y-4">
               <div>
                 <input
@@ -342,11 +174,9 @@ export default function UploadWidget() {
                   autoFocus
                 />
               </div>
-              
               {error && (
                 <p className="text-red-600 text-sm font-inter">{error}</p>
               )}
-              
               <div className="flex space-x-3">
                 <button
                   type="button"
@@ -363,7 +193,7 @@ export default function UploadWidget() {
                   type="submit"
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all duration-300 font-inter"
                 >
-                  Submit
+                  Login
                 </button>
               </div>
             </form>
@@ -371,69 +201,117 @@ export default function UploadWidget() {
         </div>
       )}
 
-      {/* Details Modal */}
-      {showDetailsModal && (
+      {/* Upload Modal */}
+      {showUploadModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+          <div className="bg-white rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-playfair text-2xl font-semibold text-gray-900 mb-4 text-center">
-              Add Artwork Details
+              Upload Artwork
             </h3>
-            <p className="font-inter text-gray-600 mb-6 text-center">
-              Optionally name your artwork before uploading.
-            </p>
-            <form onSubmit={handleDetailsSubmit} className="space-y-4">
+
+            <form onSubmit={handleUpload} className="space-y-6">
+              {/* File Input */}
               <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                
+                {preview ? (
+                  <div className="relative">
+                    <img
+                      src={preview}
+                      alt="Preview"
+                      className="w-full max-h-64 object-contain rounded-lg border border-gray-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setPreview(null);
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = '';
+                        }
+                      }}
+                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full py-12 border-2 border-dashed border-gray-300 rounded-lg hover:border-emerald-500 transition-colors flex flex-col items-center justify-center gap-3 text-gray-500 hover:text-emerald-600"
+                  >
+                    <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="font-inter">Click to select an image</span>
+                    <span className="font-inter text-sm text-gray-400">JPG, PNG, GIF, or WebP • Max 20MB</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Title Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 font-inter">
+                  Artwork Title (optional)
+                </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Artwork title (optional)"
+                  placeholder="Enter a title for this artwork"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-inter text-gray-900 placeholder-gray-500"
-                  autoFocus
                 />
               </div>
+
+              {/* Error/Status Messages */}
+              {error && (
+                <p className="text-red-600 text-sm font-inter">{error}</p>
+              )}
+              {status && !error && (
+                <p className="text-emerald-600 text-sm font-inter">{status}</p>
+              )}
+
+              {/* Action Buttons */}
               <div className="flex space-x-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                  }}
-                  className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-inter"
+                  onClick={resetUploadModal}
+                  disabled={uploading}
+                  className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-inter disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all duration-300 font-inter"
+                  disabled={!selectedFile || uploading}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-all duration-300 font-inter disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Continue
+                  {uploading ? (
+                    <>
+                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Uploading...
+                    </>
+                  ) : (
+                    'Upload'
+                  )}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      {/* Status/Error Display */}
-      {(status || error) && (
-        <div className="fixed top-20 right-4 z-40">
-          <div className={`px-4 py-3 rounded-lg shadow-lg max-w-sm ${
-            error ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-          }`}>
-            <p className="font-inter text-sm">
-              {error || status}
-            </p>
-            {error && (
-              <button
-                onClick={() => setError(null)}
-                className="mt-2 text-xs underline hover:no-underline"
-              >
-                Dismiss
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </>
   );
-} 
+}

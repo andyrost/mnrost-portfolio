@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { v2 as cloudinary } from 'cloudinary';
+import { list, put } from '@vercel/blob';
 
-// Using Cloudinary RAW resource as a simple manifest store
-// public_id: manifests/portfolio.json
+const MANIFEST_FILENAME = 'manifest.json';
 
-if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-  console.error('Missing Cloudinary environment variables');
+interface ManifestItem {
+  key: string;
+  url: string;
+  title: string;
+  order: number;
 }
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-const MANIFEST_PUBLIC_ID = 'manifests/portfolio';
+interface Manifest {
+  items: ManifestItem[];
+}
 
 function requireAdmin(req: NextRequest): NextResponse | null {
   const isAuthed = req.cookies.get('admin_session')?.value === '1';
@@ -24,70 +22,59 @@ function requireAdmin(req: NextRequest): NextResponse | null {
   return null;
 }
 
-function emptyManifest() {
-  return { items: [] as Array<{ key: string; title: string; order: number }> };
-}
-
+// GET: Fetch manifest (public for gallery display)
 export async function GET() {
   try {
-    // Try to fetch manifest; if not exists, return empty
-    const res = await cloudinary.api.resources_by_ids([MANIFEST_PUBLIC_ID], { resource_type: 'raw' });
-    const asset = res?.resources?.[0];
-    if (!asset) {
-      return NextResponse.json(emptyManifest());
+    const { blobs } = await list({ prefix: MANIFEST_FILENAME });
+    const manifestBlob = blobs.find(b => b.pathname === MANIFEST_FILENAME);
+
+    if (!manifestBlob) {
+      return NextResponse.json({ items: [] });
     }
-    const url = (asset as any).secure_url as string;
-    const resp = await fetch(url, { cache: 'no-store' });
-    if (!resp.ok) {
-      return NextResponse.json(emptyManifest());
+
+    const response = await fetch(manifestBlob.url, { cache: 'no-store' });
+    if (!response.ok) {
+      return NextResponse.json({ items: [] });
     }
-    const data = await resp.json();
-    return NextResponse.json(data || emptyManifest());
-  } catch (e) {
-    return NextResponse.json(emptyManifest());
+
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('Failed to fetch manifest:', error);
+    return NextResponse.json({ items: [] });
   }
 }
 
+// PUT: Update manifest (authenticated)
 export async function PUT(req: NextRequest) {
   const unauthorized = requireAdmin(req);
   if (unauthorized) return unauthorized;
 
   try {
     const body = await req.json();
-    // Basic validation
     const items = Array.isArray(body?.items) ? body.items : [];
-    const normalized = items
+    
+    // Normalize and validate items
+    const normalized: ManifestItem[] = items
       .filter((i: any) => i && typeof i.key === 'string')
       .map((i: any, idx: number) => ({
         key: String(i.key),
+        url: String(i.url || ''),
         title: typeof i.title === 'string' ? i.title : '',
         order: Number.isFinite(i.order) ? i.order : idx,
       }));
 
-    const json = JSON.stringify({ items: normalized }, null, 2);
+    const manifest: Manifest = { items: normalized };
 
-    // Upload/overwrite raw JSON file
-    await new Promise<void>((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          public_id: MANIFEST_PUBLIC_ID,
-          resource_type: 'raw',
-          format: 'json',
-          overwrite: true,
-        },
-        (error) => {
-          if (error) return reject(error);
-          resolve();
-        }
-      );
-      uploadStream.end(Buffer.from(json, 'utf-8'));
+    // Upload/overwrite manifest
+    await put(MANIFEST_FILENAME, JSON.stringify(manifest, null, 2), {
+      access: 'public',
+      addRandomSuffix: false,
     });
 
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error('Failed to update manifest', e);
+  } catch (error) {
+    console.error('Failed to update manifest:', error);
     return NextResponse.json({ error: 'Failed to update manifest' }, { status: 500 });
   }
 }
-
-

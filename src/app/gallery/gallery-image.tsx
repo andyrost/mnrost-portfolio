@@ -3,31 +3,16 @@
 import React from 'react';
 
 interface GalleryImageProps {
-  publicId: string;
-  cloudName: string;
-  secureUrl?: string;
-  displayName?: string;
+  url: string;
+  title: string;
 }
 
-export default function GalleryImage({ publicId, cloudName, secureUrl, displayName }: GalleryImageProps) {
-  // If we have the secure_url from Cloudinary, use it directly
-  // Otherwise, try multiple URL formats
-  const urlFormats = secureUrl ? [secureUrl] : [
-    `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto,w_1000/${publicId}`,
-    `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto,w_1000/${publicId}.jpg`,
-    `https://res.cloudinary.com/${cloudName}/image/upload/q_auto,f_auto,w_1000/${publicId}.png`,
-    `https://res.cloudinary.com/${cloudName}/image/upload/${publicId}`,
-    `https://res.cloudinary.com/${cloudName}/image/upload/${publicId}.jpg`,
-    `https://res.cloudinary.com/${cloudName}/image/upload/${publicId}.png`
-  ];
-  
-  const [currentUrlIndex, setCurrentUrlIndex] = React.useState(0);
+export default function GalleryImage({ url, title }: GalleryImageProps) {
   const [isLoading, setIsLoading] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
   const [imageLoaded, setImageLoaded] = React.useState(false);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [imageDimensions, setImageDimensions] = React.useState({ width: 0, height: 0 });
-  const imageUrl = urlFormats[currentUrlIndex];
   const imageRef = React.useRef<HTMLImageElement>(null);
 
   React.useEffect(() => {
@@ -45,7 +30,7 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
       
       return () => clearTimeout(timer);
     }
-  }, [imageUrl, imageLoaded]);
+  }, [url, imageLoaded]);
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const img = e.target as HTMLImageElement;
@@ -55,15 +40,9 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
     setHasError(false);
   };
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    // Try next URL format
-    if (currentUrlIndex < urlFormats.length - 1) {
-      const nextIndex = currentUrlIndex + 1;
-      setCurrentUrlIndex(nextIndex);
-    } else {
-      setHasError(true);
-      setIsLoading(false);
-    }
+  const handleImageError = () => {
+    setHasError(true);
+    setIsLoading(false);
   };
 
   const handleClick = () => {
@@ -84,7 +63,7 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
 
     if (isModalOpen) {
       document.addEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+      document.body.style.overflow = 'hidden';
     }
 
     return () => {
@@ -92,8 +71,6 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
       document.body.style.overflow = 'unset';
     };
   }, [isModalOpen]);
-
-  const fileName = displayName || publicId.split('/').pop() || 'Artwork';
 
   // Calculate aspect ratio for better sizing
   const aspectRatio = imageDimensions.height > 0 ? imageDimensions.width / imageDimensions.height : 1;
@@ -113,8 +90,8 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
             <div className="relative overflow-hidden">
               <img
                 ref={imageRef}
-                src={imageUrl}
-                alt={fileName}
+                src={url}
+                alt={title}
                 className={`w-full transition-all duration-700 group-hover:scale-105 ${
                   isPortrait ? 'h-auto max-h-[500px]' : 
                   isLandscape ? 'h-auto max-h-[400px]' : 
@@ -127,7 +104,7 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
               {/* Elegant overlay on hover */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500">
                 <div className="absolute bottom-0 left-0 right-0 p-2">
-                  <h3 className="font-playfair text-white font-semibold text-base mb-1">{fileName}</h3>
+                  <h3 className="font-playfair text-white font-semibold text-base mb-1">{title}</h3>
                   <p className="font-inter text-white/90 text-xs">Click to view full size</p>
                 </div>
               </div>
@@ -165,7 +142,7 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
           className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 lightbox-backdrop"
           onClick={handleCloseModal}
         >
-          {/* Close button - positioned outside animated content */}
+          {/* Close button */}
           <button
             onClick={handleCloseModal}
             className="fixed top-4 right-4 text-white hover:text-gray-300 transition-all duration-200 z-10 bg-black/20 hover:bg-black/40 rounded-full p-2 backdrop-blur-sm"
@@ -182,14 +159,14 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
               onClick={(e) => e.stopPropagation()}
             >
               <img
-                src={imageUrl}
-                alt={fileName}
+                src={url}
+                alt={title}
                 className="max-w-full max-h-[80vh] object-contain"
               />
               
               {/* Image info */}
               <div className="mt-4 text-center">
-                <h3 className="font-playfair text-xl font-semibold text-gray-900 mb-2">{fileName}</h3>
+                <h3 className="font-playfair text-xl font-semibold text-gray-900 mb-2">{title}</h3>
                 <p className="font-inter text-gray-600 text-sm">
                   {imageDimensions.width > 0 && imageDimensions.height > 0 && 
                     `${imageDimensions.width} × ${imageDimensions.height} pixels`
@@ -202,4 +179,4 @@ export default function GalleryImage({ publicId, cloudName, secureUrl, displayNa
       )}
     </>
   );
-} 
+}

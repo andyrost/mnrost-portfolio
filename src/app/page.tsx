@@ -4,7 +4,11 @@ import UploadWidget from './components/upload-widget';
 
 async function getGalleryImages() {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/gallery`, {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'http://localhost:3000';
+    
+    const response = await fetch(`${baseUrl}/api/gallery`, {
       cache: 'no-store'
     });
     
@@ -13,7 +17,7 @@ async function getGalleryImages() {
     }
     
     const data = await response.json();
-    return data.resources || [];
+    return data.images || [];
   } catch (error) {
     console.error('Error fetching gallery images:', error);
     return [];
@@ -21,8 +25,7 @@ async function getGalleryImages() {
 }
 
 export default async function HomePage() {
-  const resources = await getGalleryImages();
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || '';
+  const images = await getGalleryImages();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-50">
@@ -50,7 +53,7 @@ export default async function HomePage() {
             </div>
           </div>
         }>
-          <GalleryClient resources={resources} cloudName={cloudName} />
+          <GalleryClient images={images} />
         </Suspense>
       </div>
     </div>

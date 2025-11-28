@@ -1,54 +1,76 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { v2 as cloudinary } from 'cloudinary';
+import { del, list, put } from '@vercel/blob';
 
-if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-  console.error('Missing Cloudinary environment variables');
+const MANIFEST_FILENAME = 'manifest.json';
+
+interface ManifestItem {
+  key: string;
+  url: string;
+  title: string;
+  order: number;
 }
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+interface Manifest {
+  items: ManifestItem[];
+}
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 }
 
-export async function POST(req: NextRequest) {
-  const isAuthed = req.cookies.get('admin_session')?.value === '1';
-  if (!isAuthed) return unauthorized();
+async function getManifest(): Promise<Manifest> {
   try {
-    const { publicId } = await req.json();
-    if (!publicId || typeof publicId !== 'string') {
-      return NextResponse.json({ error: 'publicId required' }, { status: 400 });
+    const { blobs } = await list({ prefix: MANIFEST_FILENAME });
+    const manifestBlob = blobs.find(b => b.pathname === MANIFEST_FILENAME);
+
+    if (!manifestBlob) {
+      return { items: [] };
     }
 
-    await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
-
-    // Update manifest: remove item
-    const manResp = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/admin/manifest`, { cache: 'no-store' });
-    const manifest = manResp.ok ? await manResp.json() : { items: [] };
-    const items = Array.isArray(manifest.items) ? manifest.items : [];
-    const nextItems = items.filter((i: any) => i.key !== publicId);
-
-    const saveRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/admin/manifest`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: nextItems })
-    });
-    if (!saveRes.ok) {
-      throw new Error('Failed to save manifest');
+    const response = await fetch(manifestBlob.url, { cache: 'no-store' });
+    if (!response.ok) {
+      return { items: [] };
     }
 
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
+    return await response.json();
+  } catch {
+    return { items: [] };
   }
 }
 
+export async function POST(req: NextRequest) {
+  const isAuthed = req.cookies.get('admin_session')?.value === '1';
+  if (!isAuthed) return unauthorized();
 
+  try {
+    const { pathname } = await req.json();
+    
+    if (!pathname || typeof pathname !== 'string') {
+      return NextResponse.json({ error: 'pathname required' }, { status: 400 });
+    }
 
+    // Delete the blob
+    await del(pathname);
 
+    // Update manifest: remove the deleted item
+    const manifest = await getManifest();
+    const nextItems = manifest.items.filter(item => item.key !== pathname);
 
+    // Re-normalize order values
+    const normalized = nextItems.map((item, idx) => ({
+      ...item,
+      order: idx,
+    }));
+
+    // Save updated manifest
+    await put(MANIFEST_FILENAME, JSON.stringify({ items: normalized }, null, 2), {
+      access: 'public',
+      addRandomSuffix: false,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('Failed to delete:', error);
+    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
+  }
+}

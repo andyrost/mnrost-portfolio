@@ -9,8 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@cloudinary/url-gen": "^1.21.0",
-    "cloudinary": "^2.7.0",
+    "@vercel/blob": "^2.0.0",
     "next": "15.4.2",
     "react": "19.1.0",
     "react-dom": "19.1.0"
