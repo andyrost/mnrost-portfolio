@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 interface ManifestItem {
   key: string;
@@ -155,12 +156,12 @@ export default function AdminPage() {
             <p className="font-inter text-gray-600 mt-1">Drag to reorder, edit titles, or delete items</p>
           </div>
           <div className="flex gap-3">
-            <a
+            <Link
               href="/"
               className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-inter"
             >
               ← Back to Gallery
-            </a>
+            </Link>
             <button
               onClick={onSave}
               disabled={saving}

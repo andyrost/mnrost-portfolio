@@ -56,12 +56,12 @@ export async function PUT(req: NextRequest) {
     
     // Normalize and validate items
     const normalized: ManifestItem[] = items
-      .filter((i: any) => i && typeof i.key === 'string')
-      .map((i: any, idx: number) => ({
+      .filter((i: Partial<ManifestItem>) => i && typeof i.key === 'string')
+      .map((i: Partial<ManifestItem>, idx: number) => ({
         key: String(i.key),
         url: String(i.url || ''),
         title: typeof i.title === 'string' ? i.title : '',
-        order: Number.isFinite(i.order) ? i.order : idx,
+        order: Number.isFinite(i.order) ? i.order! : idx,
       }));
 
     const manifest: Manifest = { items: normalized };
