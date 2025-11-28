@@ -70,6 +70,7 @@ export async function PUT(req: NextRequest) {
     await put(MANIFEST_FILENAME, JSON.stringify(manifest, null, 2), {
       access: 'public',
       addRandomSuffix: false,
+      allowOverwrite: true,
     });
 
     return NextResponse.json({ ok: true });

@@ -126,10 +126,11 @@ export async function POST(req: NextRequest) {
       order: maxOrder + 1,
     });
 
-    // Save updated manifest
+    // Save updated manifest (overwrite existing)
     await put(MANIFEST_FILENAME, JSON.stringify(manifest, null, 2), {
       access: 'public',
       addRandomSuffix: false,
+      allowOverwrite: true,
     });
 
     return NextResponse.json({

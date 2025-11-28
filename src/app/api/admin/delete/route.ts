@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
     await put(MANIFEST_FILENAME, JSON.stringify({ items: normalized }, null, 2), {
       access: 'public',
       addRandomSuffix: false,
+      allowOverwrite: true,
     });
 
     return NextResponse.json({ ok: true });
