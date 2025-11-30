@@ -111,18 +111,18 @@ export default async function HomePage() {
         ">
           <div className="flex flex-col lg:justify-center px-6 sm:px-8 lg:px-8 xl:px-10 py-8 sm:py-10 lg:py-12 lg:h-full">
             
-            {/* Mobile/Tablet: Horizontal layout | Desktop: Vertical */}
-            <div className="flex flex-row lg:flex-col items-center lg:items-start gap-6 sm:gap-8 lg:gap-0">
+            {/* Vertical layout on all screen sizes */}
+            <div className="flex flex-col items-center lg:items-start gap-6 sm:gap-8 lg:gap-0">
               
-              {/* Logo/Portrait */}
-              <div className="shrink-0 lg:mb-8 lg:w-full">
-                <div className="relative overflow-hidden rounded-sm shadow-lg w-24 h-24 sm:w-32 sm:h-32 lg:w-full lg:h-auto">
+              {/* Logo/Portrait - Full image, no cropping */}
+              <div className="w-full max-w-[200px] sm:max-w-[240px] lg:max-w-none lg:mb-8 lg:w-full">
+                <div className="relative overflow-hidden rounded-sm shadow-lg">
                   <Image
                     src="/mrostart.jpeg"
                     alt="Melissa Nielsen Rost"
                     width={400}
                     height={500}
-                    className="w-full h-full lg:h-auto object-cover"
+                    className="w-full h-auto"
                     priority
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
@@ -130,17 +130,17 @@ export default async function HomePage() {
               </div>
 
               {/* Name & Subtitle */}
-              <div className="flex-1 lg:flex-none space-y-3 sm:space-y-4 lg:space-y-6">
+              <div className="text-center lg:text-left space-y-3 sm:space-y-4 lg:space-y-6">
                 <div>
                   <h1 className="font-playfair text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-semibold text-stone-900 leading-tight tracking-tight">
                     <span className="lg:block">Melissa</span>
                     <span className="lg:hidden"> </span>
                     <span className="lg:block">Nielsen Rost</span>
                   </h1>
-                  <div className="mt-3 lg:mt-4 w-12 lg:w-16 h-0.5 bg-gradient-to-r from-amber-700 to-amber-500" />
+                  <div className="mt-3 lg:mt-4 w-12 lg:w-16 h-0.5 bg-gradient-to-r from-amber-700 to-amber-500 mx-auto lg:mx-0" />
                 </div>
                 
-                <p className="font-inter text-stone-600 text-sm sm:text-base lg:text-base xl:text-lg leading-relaxed max-w-xs hidden sm:block">
+                <p className="font-inter text-stone-600 text-sm sm:text-base lg:text-base xl:text-lg leading-relaxed max-w-xs mx-auto lg:mx-0 hidden sm:block">
                   A curated collection of artistic work and creative expressions
                 </p>
               </div>
@@ -157,7 +157,7 @@ export default async function HomePage() {
             </div>
 
             {/* Mobile collection count */}
-            <div className="lg:hidden mt-4 sm:mt-6">
+            <div className="lg:hidden mt-4 sm:mt-6 text-center">
               <p className="font-inter text-stone-400 text-xs sm:text-sm">
                 {images.length} work{images.length !== 1 ? 's' : ''} in collection
               </p>
