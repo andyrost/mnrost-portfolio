@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { upload } from '@vercel/blob/client';
 import { useAuth } from './auth-context';
 
 export default function UploadWidget() {
@@ -82,19 +83,19 @@ export default function UploadWidget() {
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('title', title);
+      // Generate a unique filename
+      const ext = selectedFile.name.split('.').pop() || 'jpg';
+      const slug = title
+        ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50)
+        : `image-${Date.now()}`;
+      const pathname = `portfolio/${slug}-${Date.now()}.${ext}`;
 
-      const res = await fetch('/api/gallery', {
-        method: 'POST',
-        body: formData,
+      // Upload directly to Vercel Blob (bypasses serverless function size limits)
+      await upload(pathname, selectedFile, {
+        access: 'public',
+        handleUploadUrl: '/api/gallery/upload',
+        clientPayload: JSON.stringify({ title: title || 'Untitled' }),
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Upload failed');
-      }
 
       setStatus('Upload complete!');
       setTimeout(() => {
