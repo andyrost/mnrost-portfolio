@@ -3,6 +3,9 @@ import Image from 'next/image';
 import GalleryClient from './gallery/gallery-client';
 import UploadWidget from './components/upload-widget';
 
+// This page fetches fresh data on every request (gallery images from blob storage)
+export const dynamic = 'force-dynamic';
+
 async function getGalleryImages() {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
