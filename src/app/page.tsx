@@ -2,26 +2,88 @@ import { Suspense } from 'react';
 import Image from 'next/image';
 import GalleryClient from './gallery/gallery-client';
 import UploadWidget from './components/upload-widget';
+import { list } from '@vercel/blob';
 
 // This page fetches fresh data on every request (gallery images from blob storage)
 export const dynamic = 'force-dynamic';
 
-async function getGalleryImages() {
+const MANIFEST_FILENAME = 'manifest.json';
+
+interface ManifestItem {
+  key: string;
+  url: string;
+  title: string;
+  order: number;
+}
+
+interface Manifest {
+  items: ManifestItem[];
+}
+
+async function getManifest(): Promise<Manifest> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : 'http://localhost:3000';
+    const { blobs } = await list({ prefix: MANIFEST_FILENAME });
+    const manifestBlob = blobs.find(b => b.pathname === MANIFEST_FILENAME);
     
-    const response = await fetch(`${baseUrl}/api/gallery`, {
-      cache: 'no-store'
+    if (!manifestBlob) {
+      return { items: [] };
+    }
+    
+    const cacheBustUrl = `${manifestBlob.url}?_=${Date.now()}`;
+    const response = await fetch(cacheBustUrl, { 
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      }
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      console.error('Failed to fetch manifest:', response.status, response.statusText);
+      return { items: [] };
     }
     
-    const data = await response.json();
-    return data.images || [];
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching manifest:', error);
+    return { items: [] };
+  }
+}
+
+async function getGalleryImages() {
+  try {
+    // Call blob API directly instead of going through HTTP fetch
+    const [{ blobs }, manifest] = await Promise.all([
+      list({ prefix: 'portfolio/' }),
+      getManifest()
+    ]);
+
+    // Create a map for quick lookup
+    const manifestMap = new Map(
+      manifest.items.map(item => [item.key, item])
+    );
+
+    // Filter to only image files and enrich with manifest data
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const images = blobs
+      .filter(blob => {
+        const ext = blob.pathname.toLowerCase().slice(blob.pathname.lastIndexOf('.'));
+        return imageExtensions.includes(ext);
+      })
+      .map(blob => {
+        const manifestItem = manifestMap.get(blob.pathname);
+        return {
+          pathname: blob.pathname,
+          url: blob.url,
+          uploadedAt: blob.uploadedAt,
+          size: blob.size,
+          title: manifestItem?.title || blob.pathname.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Untitled',
+          order: manifestItem?.order ?? 999999,
+        };
+      })
+      .sort((a, b) => a.order - b.order);
+
+    return images;
   } catch (error) {
     console.error('Error fetching gallery images:', error);
     return [];
