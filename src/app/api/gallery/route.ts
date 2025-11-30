@@ -25,8 +25,17 @@ async function getManifest(): Promise<Manifest> {
       return { items: [] };
     }
     
-    const response = await fetch(manifestBlob.url, { cache: 'no-store' });
+    // Add cache-busting query parameter to ensure we get the latest manifest
+    const cacheBustUrl = `${manifestBlob.url}?_=${Date.now()}`;
+    const response = await fetch(cacheBustUrl, { 
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      }
+    });
     if (!response.ok) {
+      console.error('Failed to fetch manifest:', response.status, response.statusText);
       return { items: [] };
     }
     
