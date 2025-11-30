@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { list, put } from '@vercel/blob';
+import { verifySessionToken } from '@/app/lib/auth';
 
 const MANIFEST_FILENAME = 'manifest.json';
 
@@ -14,8 +15,9 @@ interface Manifest {
   items: ManifestItem[];
 }
 
-function requireAdmin(req: NextRequest): NextResponse | null {
-  const isAuthed = req.cookies.get('admin_session')?.value === '1';
+async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
+  const token = req.cookies.get('admin_session')?.value;
+  const isAuthed = token ? await verifySessionToken(token) : false;
   if (!isAuthed) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -47,7 +49,7 @@ export async function GET() {
 
 // PUT: Update manifest (authenticated)
 export async function PUT(req: NextRequest) {
-  const unauthorized = requireAdmin(req);
+  const unauthorized = await requireAdmin(req);
   if (unauthorized) return unauthorized;
 
   try {

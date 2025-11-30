@@ -6,9 +6,20 @@ import { createPortal } from 'react-dom';
 interface GalleryImageProps {
   url: string;
   title: string;
+  pathname?: string;
+  isAuthenticated?: boolean;
+  onDelete?: (pathname: string) => void;
+  isDeleting?: boolean;
 }
 
-export default function GalleryImage({ url, title }: GalleryImageProps) {
+export default function GalleryImage({ 
+  url, 
+  title, 
+  pathname,
+  isAuthenticated = false,
+  onDelete,
+  isDeleting = false,
+}: GalleryImageProps) {
   const [isLoading, setIsLoading] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
   const [imageLoaded, setImageLoaded] = React.useState(false);
@@ -125,12 +136,48 @@ export default function GalleryImage({ url, title }: GalleryImageProps) {
           
           {/* Image info */}
           <div className="mt-2 sm:mt-3 md:mt-4 pt-2 sm:pt-3 md:pt-4 border-t border-stone-100">
-            <h3 className="font-playfair text-base sm:text-lg font-semibold text-stone-900">{title}</h3>
-            {imageDimensions.width > 0 && imageDimensions.height > 0 && (
-              <p className="font-inter text-stone-500 text-xs mt-1">
-                {imageDimensions.width} × {imageDimensions.height}
-              </p>
-            )}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-playfair text-base sm:text-lg font-semibold text-stone-900">{title}</h3>
+                {imageDimensions.width > 0 && imageDimensions.height > 0 && (
+                  <p className="font-inter text-stone-500 text-xs mt-1">
+                    {imageDimensions.width} × {imageDimensions.height}
+                  </p>
+                )}
+              </div>
+              
+              {/* Delete button - only shown when authenticated */}
+              {isAuthenticated && pathname && onDelete && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(pathname);
+                    closeModal();
+                  }}
+                  disabled={isDeleting}
+                  className="flex-shrink-0 px-3 py-1.5 sm:px-4 sm:py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 active:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  title="Delete this artwork"
+                >
+                  {isDeleting ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span className="hidden sm:inline">Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      <span className="hidden sm:inline">Delete</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

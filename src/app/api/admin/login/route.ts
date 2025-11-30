@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createSessionToken, verifySessionToken } from '@/app/lib/auth';
 
-// Simple single-admin password. Move to env/hashed for production.
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'moonmouse6';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!ADMIN_PASSWORD) {
+  console.error('ADMIN_PASSWORD environment variable is required');
+}
 
 export async function POST(req: NextRequest) {
+  if (!ADMIN_PASSWORD) {
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
   try {
     const { password } = await req.json();
     if (!password) {
@@ -14,9 +22,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
+    const sessionToken = await createSessionToken();
     const res = NextResponse.json({ ok: true });
-    // Issue a simple session cookie
-    res.cookies.set('admin_session', '1', {
+    res.cookies.set('admin_session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -42,8 +50,9 @@ export async function DELETE() {
 }
 
 export async function GET(req: NextRequest) {
-  const isAuthed = req.cookies.get('admin_session')?.value === '1';
-  return NextResponse.json({ authenticated: !!isAuthed });
+  const token = req.cookies.get('admin_session')?.value;
+  const isAuthed = token ? await verifySessionToken(token) : false;
+  return NextResponse.json({ authenticated: isAuthed });
 }
 
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { del, list, put } from '@vercel/blob';
+import { verifySessionToken } from '@/app/lib/auth';
 
 const MANIFEST_FILENAME = 'manifest.json';
 
@@ -39,7 +40,8 @@ async function getManifest(): Promise<Manifest> {
 }
 
 export async function POST(req: NextRequest) {
-  const isAuthed = req.cookies.get('admin_session')?.value === '1';
+  const token = req.cookies.get('admin_session')?.value;
+  const isAuthed = token ? await verifySessionToken(token) : false;
   if (!isAuthed) return unauthorized();
 
   try {

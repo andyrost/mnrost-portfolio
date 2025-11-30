@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import GalleryImage from './gallery-image';
+import { useAuth } from '../components/auth-context';
 
 interface ImageData {
   pathname: string;
@@ -13,7 +15,34 @@ interface GalleryClientProps {
   images: ImageData[];
 }
 
-export default function GalleryClient({ images }: GalleryClientProps) {
+export default function GalleryClient({ images: initialImages }: GalleryClientProps) {
+  const { isAuthenticated } = useAuth();
+  const [images, setImages] = useState(initialImages);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const handleDelete = async (pathname: string) => {
+    if (!confirm('Delete this image? This cannot be undone.')) return;
+    
+    setDeleting(pathname);
+    try {
+      const res = await fetch('/api/admin/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pathname }),
+      });
+      
+      if (!res.ok) throw new Error('Delete failed');
+      
+      // Remove from local state
+      setImages(prev => prev.filter(img => img.pathname !== pathname));
+    } catch (error) {
+      console.error('Delete failed:', error);
+      alert('Failed to delete image. Please try again.');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   return (
     <>
       {images.length === 0 ? (
@@ -44,6 +73,10 @@ export default function GalleryClient({ images }: GalleryClientProps) {
               <GalleryImage 
                 url={image.url}
                 title={image.title}
+                pathname={image.pathname}
+                isAuthenticated={isAuthenticated}
+                onDelete={handleDelete}
+                isDeleting={deleting === image.pathname}
               />
             </div>
           ))}

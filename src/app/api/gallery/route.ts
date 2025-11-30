@@ -1,6 +1,7 @@
 // /app/api/gallery/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { list, put } from '@vercel/blob';
+import { verifySessionToken } from '@/app/lib/auth';
 
 const MANIFEST_FILENAME = 'manifest.json';
 
@@ -92,7 +93,8 @@ export async function GET() {
 // POST: Upload a new image (authenticated)
 export async function POST(req: NextRequest) {
   try {
-    const isAuthed = req.cookies.get('admin_session')?.value === '1';
+    const token = req.cookies.get('admin_session')?.value;
+    const isAuthed = token ? await verifySessionToken(token) : false;
     if (!isAuthed) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
